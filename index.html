@@ -9,6 +9,7 @@
 <meta property="og:description" content="Открой, это очень важно 🙈">
 <meta name="description" content="Открой, это очень важно 🙈">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💌</text></svg>">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&display=swap" rel="stylesheet">
@@ -299,14 +300,29 @@ const pad = n => String(n).padStart(2,'0');
 const fmtDate = d => d.toLocaleDateString('ru-RU',{weekday:'long', day:'numeric', month:'long'});
 const isWeekend = d => d.getDay()===0 || d.getDay()===6;
 
-function notify(text){
-  if(!TG_TOKEN || !TG_CHAT_ID) return;
+// Если сайт открыт внутри Telegram (через кнопку бота) — знаем, кто она
+const tg = window.Telegram && window.Telegram.WebApp;
+const tgUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+if(tg && tgUser){ try{ tg.ready(); tg.expand(); }catch(e){} }
+const herName = tgUser ? [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') + (tgUser.username ? ` (@${tgUser.username})` : '') : '';
+
+function haptic(){
   try{
-    const body = new URLSearchParams({ chat_id:TG_CHAT_ID, text });
+    if(tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+    else if(navigator.vibrate) navigator.vibrate(40);
+  }catch(e){}
+}
+
+function sendTo(chatId, text){
+  if(!TG_TOKEN || !chatId) return;
+  try{
+    const body = new URLSearchParams({ chat_id:chatId, text });
     fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, { method:'POST', mode:'no-cors', body, keepalive:true })
       .catch(()=>{});
   }catch(e){}
 }
+function notify(text){ sendTo(TG_CHAT_ID, text); }      // тебе
+function notifyHer(text){ if(tgUser) sendTo(tgUser.id, text); } // ей (только если открыла через бота)
 
 // ---------- navigation ----------
 function renderDots(step){
@@ -333,7 +349,7 @@ function sayNo(){
   em.textContent = NO_EMOJI[Math.min(i, NO_EMOJI.length-1)];
   em.classList.remove('wiggle'); void em.offsetWidth; em.classList.add('wiggle');
   $('noHint').textContent = NO_HINTS[Math.min(i, NO_HINTS.length-1)];
-  if(navigator.vibrate) navigator.vibrate(40);
+  haptic();
   if(state.noCount >= NO_TEXTS.length){
     no.style.opacity = '0';
     setTimeout(()=>{ no.style.display='none'; }, 300);
@@ -439,13 +455,24 @@ function confirmDate(){
   burst(90);
   setTimeout(()=>burst(60), 900);
 
+  // напоминание ей
+  notifyHer(
+    `Привет, Настя! 💌 Напоминаю, о чём мы договорились:\n\n` +
+    `${o.e} ${o.t}\n` +
+    `📅 ${dateStr.charAt(0).toUpperCase()+dateStr.slice(1)}\n` +
+    (o.home ? `🏠 Буду у тебя к ${pad(h)}:00\n` : `🚗 Заеду за тобой в ${pad(h-1)}:00\n`) +
+    `\nС меня ${o.me}.\nС тебя — хорошее настроение и один поцелуй при встрече 😘`
+  );
+
+  // уведомление тебе
   notify(
     `💌 Настя сказала ДА!\n\n` +
     `${o.e} ${o.t}\n` +
     `📅 ${dateStr}, ${pad(h)}:00\n` +
     (o.home ? `🏠 Быть у неё к ${pad(h)}:00\n` : `🚗 Заехать за ней в ${pad(h-1)}:00\n`) +
     (state.mood ? `Настроение: ${state.mood.e}\n` : '') +
-    `Нажала «Нет»: ${state.noCount} раз(а)`
+    `Нажала «Нет»: ${state.noCount} раз(а)\n` +
+    (tgUser ? `Открыла через бота: ${herName} ✅ (напоминание ей отправлено)` : `Открыла по ссылке в браузере (напоминание ей не отправлено)`)
   );
 }
 
@@ -483,7 +510,7 @@ renderOptions();
 renderDays();
 renderMoods();
 bgHearts();
-if(NOTIFY_ON_OPEN) notify('👀 Настя открыла приглашение!');
+if(NOTIFY_ON_OPEN) notify(tgUser ? `👀 Настя открыла приглашение через бота! ${herName}` : '👀 Настя открыла приглашение (по ссылке)');
 </script>
 </body>
 </html>
